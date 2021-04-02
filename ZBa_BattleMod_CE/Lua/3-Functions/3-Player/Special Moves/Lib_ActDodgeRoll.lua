@@ -3,11 +3,11 @@ local B = CBW_Battle
 local state_dodgeroll = 1
 local state_fret = 2
 local state_bombjump = 10
-local dodgeroll_time = 10
-local dodgeroll_endlag = 20
-local rollspeed = 48
+local dodgeroll_time = 15
+local dodgeroll_endlag = 12
+local rollspeed = 75
 local dropspeed = 20
-local cooldown = TICRATE*2
+local cooldown = TICRATE*3/2
 
 B.Action.DodgeRoll = function(mo,doaction)
 	local player = mo.player	

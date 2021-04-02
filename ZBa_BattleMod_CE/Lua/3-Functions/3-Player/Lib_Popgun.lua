@@ -103,7 +103,7 @@ local function newGunslinger(player)
 		-- Same code as vanilla, but without the clause for speed.
 		-- You naturally lose your speed via friction.
 
-		local lockon = newGunLook(player)
+		local lockon = nil
 		if (lockon and lockon.valid)
 			P_SpawnLockOn(player, lockon, mobjinfo[MT_LOCKON].spawnstate)
 		end
@@ -115,7 +115,7 @@ local function newGunslinger(player)
 
 			mo.state = S_PLAY_FIRE
 			player.panim = PA_ABILITY2
-			player.weapondelay = refiretime
+			//player.weapondelay = refiretime
 			mo.momx = $ * 2/3
 			mo.momy = $ * 2/3
 			S_StartSoundAtVolume(mo,sfx_s1c4,150)
@@ -125,29 +125,53 @@ local function newGunslinger(player)
 			end
 			
 			if (lockon and lockon.valid)
-				mo.angle = R_PointToAngle2(mo.x, mo.y, lockon.x, lockon.y)
-				bullet = P_SpawnPointMissile(
-					mo,
-					lockon.x, lockon.y, zpos(lockon, player.revitem),
-					player.revitem,
-					mo.x, mo.y, zpos(mo, player.revitem)
-				)
 
 			else
-				bullet = P_SpawnPointMissile(
-					mo,
-					mo.x + P_ReturnThrustX(nil, mo.angle, FRACUNIT),
-					mo.y + P_ReturnThrustY(nil, mo.angle, FRACUNIT),
-					zpos(mo, player.revitem),
-					player.revitem,
-					mo.x, mo.y, zpos(mo, player.revitem)
-				)
-
-				if (bullet and bullet.valid)
-					bullet.flags = $1 & ~MF_NOGRAVITY
-					bullet.momx = $1 / 2
-					bullet.momy = $1 / 2
+				local temp = mo.angle
+				
+				for lol = -1, 1
+			
+					local lol2 = MT_CORK
+					local rngg = P_RandomRange(1,20)
+					if rngg < 3
+						lol2 = MT_THROWNEXPLOSION
+					elseif rngg < 7
+						lol2 = MT_FBOMB
+					elseif rngg == 7
+						lol2 = MT_FLICKY_01
+						S_StartSound(mo,sfx_3db14)
+					end
+					
+					mo.angle = temp + (ANG20 * lol)
+					bullet = P_SpawnPointMissile(
+						mo,
+						mo.x + P_ReturnThrustX(nil, mo.angle, FRACUNIT),
+						mo.y + P_ReturnThrustY(nil, mo.angle, FRACUNIT),
+						zpos(mo, player.revitem),
+						lol2,
+						mo.x, mo.y, zpos(mo, player.revitem)
+					)
+					
+					if lol2 == MT_FBOMB and bullet and bullet.valid
+						local bomb = bullet
+						if G_RingSlingerGametype() or B.BattleGametype() then
+							bomb.state = S_COLORBOMB1
+							bomb.color = player.skincolor
+						end
+						local water = B.WaterFactor(mo)
+						bomb.momz = bomb.scale*7*P_MobjFlip(mo)/water
+						//bomb.flags = $|MF_BOUNCE|MF_GRENADEBOUNCE
+						//bomb.fuse = TICRATE
+						//bomb.staticfuse = true
+					end
 				end
+				
+				mo.angle = temp
+				//if (bullet and bullet.valid)
+					//bullet.flags = $1 & ~MF_NOGRAVITY
+					//bullet.momx = $1 / 2
+					//bullet.momy = $1 / 2
+				//end
 			end
 -- 	 			player.gunheld = true
 			player.drawangle = mo.angle

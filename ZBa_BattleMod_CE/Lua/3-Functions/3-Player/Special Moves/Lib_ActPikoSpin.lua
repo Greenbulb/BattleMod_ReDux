@@ -44,6 +44,40 @@ local DoThrust = function(mo)
 	end
 end
 
+local meme = function(mo,player)
+	if not(player.dustdevil and player.dustdevil.valid)
+		local missile = P_SPMAngle(mo,MT_DUSTDEVIL_BASE,mo.angle)
+		if missile and missile.valid then
+			missile.color = player.skincolor
+			if not(player.mo.flags2&MF2_TWOD or twodlevel) then
+				missile.fuse = TICRATE*5
+			else
+				missile.fuse = 45
+			end
+			S_StartSound(missile,sfx_s3kb8)
+			S_StartSound(missile,sfx_s3kcfl)	
+
+			if G_GametypeHasTeams() then
+				missile.color = mo.color
+			end
+-- 				if P_MobjFlip(mo) == -1 then
+-- 					missile.z = $-missile.height
+-- 					missile.flags2 = $|MF2_OBJECTFLIP
+-- 					missile.eflags = $|MFE_VERTICALFLIP
+-- 				end
+			if missile.tracer and missile.tracer.valid then
+				missile.tracer.target = player.mo
+				if P_MobjFlip(mo) == -1 then 
+					missile.tracer.z = $-missile.tracer.height
+					missile.tracer.flags2 = $|MF2_OBJECTFLIP
+					missile.tracer.eflags = $|MFE_VERTICALFLIP
+				end					
+			end
+			player.dustdevil = missile
+		end
+	end
+end
+
 B.Action.PikoSpin = function(mo,doaction)
 	local player = mo.player
 	if P_PlayerInPain(player) then
@@ -111,11 +145,13 @@ B.Action.PikoSpin = function(mo,doaction)
 			mo.state = S_PLAY_FALL
 			player.actionstate = 0
 			player.actiontime = 0
+			meme(mo,player)
 			return
 		end
 		if P_IsObjectOnGround(mo)
 			player.actionstate = 0
 			player.actiontime = 0
+			meme(mo,player)
 			return
 		end
 	end

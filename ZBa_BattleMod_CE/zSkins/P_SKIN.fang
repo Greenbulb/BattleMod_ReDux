@@ -1,0 +1,4 @@
+name = fang
+runspeed = 20
+normalspeed = 25
+thrustfactor = 8

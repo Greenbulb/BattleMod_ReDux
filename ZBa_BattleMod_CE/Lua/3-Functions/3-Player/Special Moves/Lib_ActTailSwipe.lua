@@ -7,11 +7,11 @@ local cooldown_throw = cooldown_dash
 local sideangle = ANG30 + ANG10
 local throw_strength = 30
 local throw_lift = 10
-local thrustpower = 16
+local thrustpower = 30
 
 local function sbvars(m,pmo)
 	if m and m.valid then
-		m.fuse = 45
+		m.fuse = 8*TICRATE
 		m.momx = $/2+pmo.momx/2
 		m.momy = $/2+pmo.momy/2
 		S_StartSoundAtVolume(m,sfx_s3kb8,190)
@@ -109,6 +109,7 @@ B.Action.TailSwipe = function(mo,doaction)
 
 	//Activate thrust
 	if thrusttrigger 
+		local m = P_SPMAngle(mo,MT_SONICBOOM,mo.angle + ANGLE_180,0)
 		B.PayRings(player)
 		//Tails can get as much as 4x cooldown for using flight dash after flying for a while
 		if mo.state == S_PLAY_FLY_TIRED

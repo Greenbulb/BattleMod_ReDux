@@ -6,8 +6,8 @@ local threshold2 = threshold1+35
 local state_charging = 1
 local state_energyblast = 2
 local state_dashslicer = 3
-local cooldownlength = TICRATE*11/4
-local cooldown_cancel = TICRATE*5/4
+local cooldownlength = TICRATE
+local cooldown_cancel = TICRATE
 local sideangle = ANG15/4 //Horizontal spread
 local vertwidth = ANG15/2 //Vertical spread
 local blastcount1 = 3
@@ -192,7 +192,7 @@ B.Action.EnergyAttack=function(mo,doaction,throwring,tossflag)
 					if m == 0 then zangle = 0
 					else zangle = B.FixedLerp(-vwidth,vwidth,FRACUNIT*n/m)
 					end
-					B.InstaThrustZAim(blast,xyangle,zangle,speed,0)
+					B.InstaThrustZAim(blast,xyangle,zangle + player.cmd.aiming<<16,speed,0)
 					if G_GametypeHasTeams() then
 						blast.colorized = true
 						blast.color = mo.color
@@ -343,7 +343,7 @@ B.EnergyGather = function(mo,target,xyangle,zangle)
 end
 
 B.DashSlicerSpawn=function(mo)
-	mo.fuse = 8
+	mo.fuse = 16
 	mo.time = 0
 end
 

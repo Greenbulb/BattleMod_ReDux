@@ -17,13 +17,13 @@ B.InputControl = function(player)
 		player.cmd.buttons = 0
 	end
 	if player.melee_state
-		if player.melee_charge < FRACUNIT
+		/*if player.melee_charge < FRACUNIT
 			player.cmd.forwardmove = $ / 3
 			player.cmd.sidemove = $ / 3
 		else
 			player.cmd.forwardmove = 0
 			player.cmd.sidemove = 0
-		end
+		end*/
 	end
 	if (player.mo and player.mo.valid and player.mo.state == S_PLAY_FLY_TIRED)
 		player.cmd.forwardmove = $ / 2

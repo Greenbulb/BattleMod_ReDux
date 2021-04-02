@@ -5,7 +5,7 @@ local state_superspinjump = 1
 local state_groundpound_rise = 2
 local state_groundpound_fall = 3
 local jumpthrust = 42*FRACUNIT
-local pound_startthrust = 10*FRACUNIT
+local pound_startthrust = 0
 local pound_downaccel = FRACUNIT*4//4
 local jumpfriction = FRACUNIT*9/10
 local poundfriction = FRACUNIT
@@ -93,7 +93,7 @@ B.Action.SuperSpinJump=function(mo,doaction)
 				P_SetObjectMomZ(mo,thrust,true) //Inherit platform momentum
 				S_StartSound(mo,sfx_s3k5f)
 				player.state = S_PLAY_SPRING
-				P_InstaThrust(mo,R_PointToAngle2(0,0,mo.momx,mo.momy),FixedHypot(mo.momx,mo.momy)/6)
+				P_InstaThrust(mo,R_PointToAngle2(0,0,mo.momx,mo.momy),FixedHypot(mo.momx,mo.momy)/2)
 				//Create projectile blast
 				for n = 0, 23
 					local p = P_SPMAngle(mo,MT_GROUNDPOUND,mo.angle+n*ANG15,0)
