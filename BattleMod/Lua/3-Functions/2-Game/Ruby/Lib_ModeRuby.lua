@@ -115,11 +115,15 @@ R.Collect = function(mo,toucher)
 	or toucher.player.tossdelay -- Can't collect if tossflag is on cooldown
 		return
 	end
+	if mo.target and mo.target.valid then
+		mo.lasttouched = mo.target
+	else
+		mo.lasttouched = toucher
+	end
 	local previoustarget = mo.target
 	if (G_GametypeHasTeams() and previoustarget and previoustarget.player and (previoustarget.player.ctfteam == toucher.player.ctfteam))
 		return
 	end
-	
 	mo.target = toucher
 	free(mo)
 	mo.idle = nil
@@ -247,6 +251,63 @@ end
 
 R.Thinker = function(mo)
 	mo.shadowscale = FRACUNIT>>1
+
+	//Determine toss blink
+	local tossblink = 0
+	if mo.lasttouched and mo.lasttouched.player then
+		tossblink = mo.lasttouched.player.tossdelay
+	end
+
+	if tossblink then
+		
+		local floorz = ((mo.flags2 & MF2_OBJECTFLIP) and mo.ceilingz-(FRACUNIT/2)) or mo.floorz+(FRACUNIT/2)
+
+		if not(mo.floorvfx and (type(mo.floorvfx) == "table")) then
+			mo.floorvfx = {}
+		end
+
+		local color = ((tossblink > (TICRATE/4)) and ({[1]=skincolor_redteam,[2]=skincolor_blueteam})[mo.lasttouched.player.ctfteam]) or SKINCOLOR_GOLD
+		local blendmode = ((tossblink > (TICRATE/4)) and AST_TRANSLUCENT) or AST_ADD
+
+		if #mo.floorvfx < 6 then
+			table.insert(mo.floorvfx, P_SpawnMobj(mo.x, mo.y, floorz, MT_GHOST_VFX))
+			local vfx = mo.floorvfx[#mo.floorvfx]
+			if (mo.flags2 & MF2_OBJECTFLIP) then
+				vfx.flags2 = $|MF2_OBJECTFLIP
+			end
+			vfx.fuse = mobjinfo[MT_GHOST].damage/2
+			vfx.renderflags = $|RF_FULLBRIGHT|RF_FLOORSPRITE|RF_ABSOLUTEOFFSETS|RF_NOCOLORMAPS
+			vfx.spritexoffset = 45*FRACUNIT
+			vfx.spriteyoffset = 45*FRACUNIT
+			vfx.blendmode = blendmode
+			vfx.sprite = SPR_STAB
+			vfx.destscale = mo.scale*2
+			vfx.frame = 0|FF_TRANS50
+			vfx.colorized = true
+			vfx.color = color
+			vfx.flags2 = $|MF2_SPLAT
+		end
+		for k, vfx in ipairs(mo.floorvfx) do
+			if not(vfx and vfx.valid) then
+				table.remove(mo.floorvfx, k)
+			else
+				vfx.color = color
+			end
+		end
+	else
+		if mo.floorvfx and (type(mo.floorvfx) == "table") then
+			--print("exists")
+			for k, vfx in ipairs(mo.floorvfx) do
+				if vfx and vfx.valid then
+					--print("deleted")
+					P_RemoveMobj(vfx)
+				end
+				table.remove(mo.floorvfx, k)
+				--print("removed")
+			end
+			mo.floorvfx = nil
+		end
+	end
 
 	-- Idle timer
 	if mo.idle != nil then 

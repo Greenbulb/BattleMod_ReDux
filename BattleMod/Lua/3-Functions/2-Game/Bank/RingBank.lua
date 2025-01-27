@@ -210,6 +210,8 @@ local CHAOSRING_STARTSPAWNBUFFER = TICRATE*2 --Time it takes for Chaos Rings to 
 local CHAOSRING_SPAWNBUFFER = TICRATE*46 --Chaos rings spawn every X seconds
 local CHAOSRING_SCALE = FRACUNIT+(FRACUNIT/2)
 local CHAOSRING_TYPE = MT_BATTLE_CHAOSRING
+local CHAOSRING_WINTIMER = TICRATE*12
+
 
 local idletics = TICRATE*16
 local waittics = TICRATE*4
@@ -221,6 +223,7 @@ local SLOWCAPPINGALLY_SFX  = sfx_kc5a
 local SLOWCAPPINGENEMY_SFX = sfx_kc59
 
 local CHAOSRING_SPAWNTABLE = {}
+local CHAOSRING_WINCOUNTDOWN = CHAOSRING_WINTIMER
 local CHAOSRING_LIVETABLE = {nil, nil, nil, nil, nil, nil} --Table where you can get each Chaos ring's Object
 
 local CHAOSRING_DATA = {
@@ -260,6 +263,7 @@ end
 
 addHook('MapLoad', do
 
+	if gametype ~= GT_BANK then return end
 	CHAOSRING_SPAWNTABLE = {} --Clear the table
 
 	for mt in mapthings.iterate do
@@ -308,6 +312,9 @@ local function touchChaosRing(mo, toucher) --Going to copy Ruby/Topaz code here
 	end
 	if previoustarget and previoustarget.valid then
 		previoustarget.player.gotcrystal = false
+		mo.lasttouched = previoustarget
+	else
+		mo.lasttouched = toucher
 	end
 	toucher.player.gotcrystal = true
 	mo.target = toucher
@@ -409,6 +416,7 @@ local chaosRingFunc = function(mo)
 
 	if mo.chaosring_corona and mo.chaosring_corona.valid then
 		mo.chaosring_corona.fuse = max($, 2)
+		mo.chaosring_corona.scale = mo.scale
 		P_MoveOrigin(mo.chaosring_corona, mo.x, mo.y, mo.z+(P_MobjFlip(mo)*(mo.height/2)))
 	else
 		mo.chaosring_corona = P_SpawnMobjFromMobj(mo, 0,0,0, MT_INVINCIBLE_LIGHT)
@@ -467,10 +475,10 @@ local chaosRingFunc = function(mo)
 		if mo.target.player then
 		
 			local capture = function(team, bank)
-				local captime = 5 * TICRATE
+				local captime = 1--5 * TICRATE
 				local friendly = (splitscreen or (consoleplayer and consoleplayer.ctfteam == team))
 				local sfx = friendly and SLOWCAPPINGALLY_SFX or SLOWCAPPINGENEMY_SFX
-				mo.target.player.gotcrystal_time = ($~=nil and $+1) or 0
+				mo.target.player.gotcrystal_time = ($~=nil and $+1) or 1
 				mo.chaosring_capturing = true
 				if mo.target.player.gotcrystal_time > captime then
 					S_StartSound(nil, (friendly and sfx_kc5c) or sfx_kc46)
@@ -533,6 +541,65 @@ local chaosRingFunc = function(mo)
 	local overtime = ((cvar_overtime) and cvar_timelimit*60-leveltime/TICRATE <= 0)
 
 	
+
+	//Determine toss blink
+	local tossblink = 0
+	if mo.lasttouched and mo.lasttouched.player and not(mo.target) then
+		tossblink = mo.lasttouched.player.tossdelay
+	end
+
+	if tossblink then
+		
+		local floorz = ((mo.flags2 & MF2_OBJECTFLIP) and mo.ceilingz-(FRACUNIT/2)) or mo.floorz+(FRACUNIT/2)
+
+		if not(mo.floorvfx and (type(mo.floorvfx) == "table")) then
+			mo.floorvfx = {}
+		end
+
+		local color = ((tossblink > (TICRATE/4)) and ({[1]=skincolor_redteam,[2]=skincolor_blueteam})[mo.lasttouched.player.ctfteam]) or SKINCOLOR_GOLD
+		local blendmode = ((tossblink > (TICRATE/4)) and AST_TRANSLUCENT) or AST_ADD
+
+		if #mo.floorvfx < 6 then
+			table.insert(mo.floorvfx, P_SpawnMobj(mo.x, mo.y, floorz, MT_GHOST_VFX))
+			local vfx = mo.floorvfx[#mo.floorvfx]
+			if (mo.flags2 & MF2_OBJECTFLIP) then
+				vfx.flags2 = $|MF2_OBJECTFLIP
+			end
+			vfx.fuse = mobjinfo[MT_GHOST].damage/2
+			vfx.renderflags = $|RF_FULLBRIGHT|RF_FLOORSPRITE|RF_ABSOLUTEOFFSETS|RF_NOCOLORMAPS
+			vfx.spritexoffset = 45*FRACUNIT
+			vfx.spriteyoffset = 45*FRACUNIT
+			vfx.blendmode = blendmode
+			vfx.sprite = SPR_STAB
+			vfx.destscale = mo.scale*2
+			vfx.frame = 0|FF_TRANS50
+			vfx.colorized = true
+			vfx.color = color
+			vfx.flags2 = $|MF2_SPLAT
+		end
+		for k, vfx in ipairs(mo.floorvfx) do
+			if not(vfx and vfx.valid) then
+				table.remove(mo.floorvfx, k)
+			else
+				vfx.color = color
+			end
+		end
+	else
+		if mo.floorvfx and (type(mo.floorvfx) == "table") then
+			--print("exists")
+			for k, vfx in ipairs(mo.floorvfx) do
+				if vfx and vfx.valid then
+					--print("deleted")
+					P_RemoveMobj(vfx)
+				end
+				table.remove(mo.floorvfx, k)
+				--print("removed")
+			end
+			mo.floorvfx = nil
+		end
+	end
+
+
 	-- Ruby Control capture mechanics
 	--[[
 	
@@ -584,6 +651,18 @@ end)
 addHook('ThinkFrame', do
 	if gametype != GT_BANK
 		return
+	end
+
+	if CHAOSRING_WINCOUNTDOWN == 0 then
+		B.Arena.ForceWin()
+		CHAOSRING_WINCOUNTDOWN = -1
+	elseif CHAOSRING_WINCOUNTDOWN > 0
+		for i = 1, 2 do
+			local bank = (i==1 and B.RedBank) or B.BlueBank
+			if #bank.chaosrings == 6 then
+				CHAOSRING_WINCOUNTDOWN = $-1
+			end
+		end
 	end
 
 	for i = 1, 6 do
