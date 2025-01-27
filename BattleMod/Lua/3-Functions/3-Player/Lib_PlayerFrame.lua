@@ -204,7 +204,7 @@ B.PlayerThinkFrame = function(player)
 	--Abilities
 	B.HammerControl(player)
 	B.CustomGunslinger(player)
-	B.ShieldButton(player)
+	B.ShieldTossflagButton(player)
 	
 	--PvP Collision
 	B.DoPriority(player)

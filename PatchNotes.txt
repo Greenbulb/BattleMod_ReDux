@@ -262,6 +262,7 @@ Console
 		battleconfig
 		battleconfig_glidestrafe
 		battleconfig_hammerstrafe
+		battleconfig_nospinshield
 		battleconfig_hud
 		battleconfig_roulette
 		battleconfig_slipstreambutton

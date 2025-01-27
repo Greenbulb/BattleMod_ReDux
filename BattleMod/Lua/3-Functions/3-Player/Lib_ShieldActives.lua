@@ -186,9 +186,9 @@ local cycleTable = function(t)
 	return t
 end
 
-local shieldbutton = BT_SHIELD
+local shieldbutton = BT_TOSSFLAG
 local cooldown = 15
-B.ShieldButton = function(player)
+B.ShieldTossflagButton = function(player)
 	if not(player and player.valid and player.mo and player.mo.valid) then
 		return
 	end

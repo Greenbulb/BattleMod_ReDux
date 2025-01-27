@@ -112,11 +112,13 @@ rawset(_G,"DF_PLAYER",		1<<3)
 
 -- Skinvar flags
 rawset(_G,"SKINVARS_GUARD",			1<<0)
-rawset(_G,"SKINVARS_GUNSLINGER",	1<<1)
-rawset(_G,"SKINVARS_ROSY",			1<<2)
-rawset(_G,"SKINVARS_GLIDESTRAFE",	1<<3)
-rawset(_G,"SKINVARS_GLIDESOUND",	1<<4)
-rawset(_G,"SKINVARS_DASHMODENERF",	1<<5)
+rawset(_G,"SKINVARS_NOSPINSHIELD",	1<<1)
+rawset(_G,"SKINVARS_GUNSLINGER",	1<<2)
+rawset(_G,"SKINVARS_ROSY",			1<<3)
+rawset(_G,"SKINVARS_GLIDESTRAFE",	1<<4)
+rawset(_G,"SKINVARS_GLIDESOUND",	1<<5)
+rawset(_G,"SKINVARS_DASHMODENERF",	1<<6)
+
 
 -- I hate srb2
 rawset(_G,"GTR_FIXGAMESET",	1<<0)
