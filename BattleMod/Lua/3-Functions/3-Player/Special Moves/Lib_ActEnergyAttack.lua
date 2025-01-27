@@ -469,6 +469,7 @@ B.Action.EnergyAttack = function(mo,doaction,throwring,tossflag)
 	
 	//Release blast
 	if (blasttrigger) then
+		mo.state = $
 		doBlast(mo, player) --blast
 		mo.energyattack_chargebuffer = blastbuffer --set buffer
 		if charged then
@@ -486,7 +487,9 @@ B.Action.EnergyAttack = function(mo,doaction,throwring,tossflag)
 	if (player.actionstate == state_charging) then
 		mo.state = S_PLAY_WALK
 -- 		player.dashmode = TICRATE*3
-		B.DrawSVSprite(player,1)
+		mo.frame = 0
+		mo.sprite = SPR_METL
+		mo.frame = _G["S"]
 		player.drawangle = mo.angle
 		player.pflags = ($|PF_JUMPED)&~PF_NOJUMPDAMAGE
 		P_SetObjectMomZ(mo,FRACUNIT/2,false) //Rise slowly
@@ -516,7 +519,9 @@ B.Action.EnergyAttack = function(mo,doaction,throwring,tossflag)
 					else
 						if mo.energyattack_chargebuffer < blastbuffer/2 then --"My cat vomitting on the floor at 3am"
 							mo.state = S_PLAY_WALK
-							B.DrawSVSprite(player,1)
+							mo.frame = 0
+							mo.sprite = SPR_METL
+							mo.frame = _G["S"]
 						end
 					end
 					player.actionstate = state_energyblast --Blast
@@ -566,7 +571,7 @@ B.Action.EnergyAttack = function(mo,doaction,throwring,tossflag)
 		player.charflags = ($|SF_NOSKID)
 		player.runspeed = 0
 		mo.frame = 0
-		B.DrawSVSprite(player, 2) --S_METALSONIC_RINGSPARK1
+		B.DrawSVSprite(player, 1) --S_METALSONIC_RINGSPARK1
 			
 		player.exhaustmeter = FRACUNIT
 
@@ -603,7 +608,7 @@ B.Action.EnergyAttack = function(mo,doaction,throwring,tossflag)
 			player.runspeed = 0
 			mo.frame = 0
 			--mo.sprite2 = SPR2_RUN_
-			B.DrawSVSprite(player, 2+(player.actiontime/2)%2)
+			B.DrawSVSprite(player, 1+(player.actiontime/2)%2)
 
 			if not(mo.energyattack_sparkaura and mo.energyattack_sparkaura.valid) then
 				mo.energyattack_sparkaura = P_SpawnMobj(mo.x,mo.y,((mo.flags2 & MF2_OBJECTFLIP) and (mo.z+mo.height)) or mo.z, auraMobj) --Spawn One --Spawn One

@@ -88,7 +88,6 @@ S["metalsonic"] = {
 	guard_frame = 2,
 	func_priority_ext = Act.EnergyAttack_Priority,
 	sprites = {
-		S_METALSONIC_GATHER,
 		S_METALSONIC_RINGSPARK1,
 		S_METALSONIC_RINGSPARK2
 	}
