@@ -96,10 +96,10 @@ local spawnFunc = function(mo, team)
 	end
 	if team == 1
 		B.RedBank = mo
-		B.RedBank.chaosrings = {}
+		B.RedBank.chaosrings = 0
 	else
 		B.BlueBank = mo
-		B.BlueBank.chaosrings = {}
+		B.BlueBank.chaosrings = 0
 	end
 	mo.state = S_TEAMRING
 	mo.scale = $<<1
@@ -206,12 +206,23 @@ local addHudSparkle = function(team, direction)
 	})
 end
 
+--Constants
 local CHAOSRING_STARTSPAWNBUFFER = TICRATE*2 --Time it takes for Chaos Rings to start spawning
 local CHAOSRING_SPAWNBUFFER = TICRATE*46 --Chaos rings spawn every X seconds
 local CHAOSRING_SCALE = FRACUNIT+(FRACUNIT/2)
 local CHAOSRING_TYPE = MT_BATTLE_CHAOSRING
 local CHAOSRING_WINTIMER = TICRATE*12
+local CHAOSRING_CAPTIME = TICRATE*5
+local CHAOSRING_INVULNTIME = TICRATE*15
 
+local CHAOSRING1 = 1<<0
+local CHAOSRING2 = 1<<1
+local CHAOSRING3 = 1<<2
+local CHAOSRING4 = 1<<3
+local CHAOSRING5 = 1<<4
+local CHAOSRING6 = 1<<5
+
+local CHAOSRING_ENUM = {CHAOSRING1, CHAOSRING2, CHAOSRING3, CHAOSRING4, CHAOSRING5, CHAOSRING6}
 
 local idletics = TICRATE*16
 local waittics = TICRATE*4
@@ -267,7 +278,7 @@ addHook('MapLoad', do
 	CHAOSRING_SPAWNTABLE = {} --Clear the table
 
 	for mt in mapthings.iterate do
-		if mt and (mt.type == 3707) and mt.valid then --Match Chaos Emerald Spawn
+		if mt and (mt.type == (mobjinfo[MT_BATTLE_CHAOSRINGSPAWNER].doomednum)) and mt.valid then --Match Chaos Emerald Spawn
 
 			local chaosring_spawn = { --Data for the spawn
 				x = mt.x*FRACUNIT,
@@ -278,7 +289,7 @@ addHook('MapLoad', do
 			}
 
 			table.insert(CHAOSRING_SPAWNTABLE, chaosring_spawn)
-			print("Inserted chaosring_spawn #"..#CHAOSRING_SPAWNTABLE)
+			--print("Inserted chaosring_spawn #"..#CHAOSRING_SPAWNTABLE)
 		end
 	end
 end)
@@ -288,17 +299,14 @@ local idletics = TICRATE*16
 
 local function free(mo)
 	if not (mo and mo.valid) then return end
-	--print(true)
 	mo.fuse = freetics
-	mo.flags = $&~MF_SPECIAL
-	mo.flags = $|MF_GRENADEBOUNCE
+	mo.flags = ($|MF_GRENADEBOUNCE) & ~(MF_SPECIAL)
 	mo.idle = idletics
 end
 
 
-
 local function touchChaosRing(mo, toucher) --Going to copy Ruby/Topaz code here
-	if mo.captured or mo.target == toucher or not(toucher.player) -- This toucher has already collected the item, or is not a player
+	if mo.target == toucher or not(toucher.player) -- This toucher has already collected the item, or is not a player
 	or P_PlayerInPain(toucher.player) or toucher.player.powers[pw_flashing] -- Can't touch if we've recently taken damage
 	or toucher.player.tossdelay -- Can't collect if tossflag is on cooldown
 		return true
@@ -307,19 +315,31 @@ local function touchChaosRing(mo, toucher) --Going to copy Ruby/Topaz code here
 	if (G_GametypeHasTeams() and previoustarget and previoustarget.player and (previoustarget.player.ctfteam == toucher.player.ctfteam))
 		return true
 	end
+	if toucher.player.ctfteam == mo.ctfteam then
+		return true
+	end
 	if toucher.player.gotcrystal then
 		return true
 	end
 	if previoustarget and previoustarget.valid then
-		previoustarget.player.gotcrystal = false
+		if previoustarget.player then
+			previoustarget.player.gotcrystal = false
+		end
 		mo.lasttouched = previoustarget
 	else
 		mo.lasttouched = toucher
+	end
+	if mo.captured and (toucher.player) then
+		mo.captured = nil
+		mo.angle = 0
+		mo.bank.chaosrings = $ & ~CHAOSRING_ENUM(mo.chaosring_num)
+		mo.bank = nil
 	end
 	toucher.player.gotcrystal = true
 	mo.target = toucher
 	free(mo)
 	mo.idle = nil
+	mo.scale = mo.idealscale
 	mo.ctfteam = 0
 	P_SetObjectMomZ(toucher, toucher.momz/2)
 	S_StartSound(mo,sfx_lvpass)
@@ -329,18 +349,24 @@ local function touchChaosRing(mo, toucher) --Going to copy Ruby/Topaz code here
 	toucher.spritexscale = toucher.scale
 	toucher.spriteyscale = toucher.scale
 	if not(previoustarget) then
-		--B.PrintGameFeed(toucher.player," picked a "..rubytext.."!")
-	else
-		--B.PrintGameFeed(toucher.player," stole the "..rubytext.." from ",previoustarget.player,"!")
+		B.PrintGameFeed(toucher.player," picked up a "..CHAOSRING_TEXT(mo.chaosring_num).."!")
+	elseif previoustarget.player
+		B.PrintGameFeed(toucher.player," stole a "..CHAOSRING_TEXT(mo.chaosring_num).." from ",previoustarget.player,"!")
 	end
 	return true
 end
 
 local function captureChaosRing(mo, bank)
-	table.insert(bank.chaosrings, mo)
+	mo.flags = $ & ~MF_SPECIAL
+	bank.chaosrings = $|(CHAOSRING_ENUM[mo.chaosring_num])
+	mo.bank = bank
 	mo.captured = true
+	addPoints(mo.target.player.ctfteam, 250)
+	P_AddPlayerScore(mo.target.player, 250)
+	mo.fuse = CHAOSRING_INVULNTIME
 	mo.angle = $+(ANG1*60*mo.chaosring_num)
-	mo.scale = $-($/3)
+	mo.scale = mo.idealscale - (mo.idealscale/3)
+	mo.ctfteam = mo.target.player.ctfteam
 end
 
 addHook("TouchSpecial", touchChaosRing, CHAOSRING_TYPE)
@@ -369,6 +395,7 @@ local function spawnChaosRing(num, chaosringnum)
 	thing.mo.color = data.color
 	thing.mo.chaosring_num = chaosringnum
 	thing.mo.idealz = thing.mo.z
+	thing.mo.idealscale = CHAOSRING_SCALE
 	CHAOSRING_LIVETABLE[chaosringnum] = thing.mo
 end
 
@@ -472,10 +499,10 @@ local chaosRingFunc = function(mo)
 			spark.spriteyoffset = $-(FRACUNIT*6)
 		end
 
-		if mo.target.player then
+		if mo.target.player and not(mo.fuse) then
 		
 			local capture = function(team, bank)
-				local captime = 1--5 * TICRATE
+				local captime = CHAOSRING_CAPTIME
 				local friendly = (splitscreen or (consoleplayer and consoleplayer.ctfteam == team))
 				local sfx = friendly and SLOWCAPPINGALLY_SFX or SLOWCAPPINGENEMY_SFX
 				mo.target.player.gotcrystal_time = ($~=nil and $+1) or 1
@@ -498,7 +525,8 @@ local chaosRingFunc = function(mo)
 				end
 			end
 			
-			if not P_IsObjectOnGround(mo.target)
+			if not P_IsObjectOnGround(mo.target) then
+				mo.target.player.gotcrystal_time = 0
 				return
 			end
 			if mo.target.player.ctfteam == 1 and P_MobjTouchingSectorSpecialFlag(mo.target, SSF_REDTEAMBASE)
@@ -519,6 +547,7 @@ local chaosRingFunc = function(mo)
 
 		mo.flags = ($&~MF_BOUNCE)|MF_NOGRAVITY|MF_SLIDEME
 		local t = mo.target
+		--print(t.player)
 		local ang = mo.angle
 		local dist = mo.target.radius*3
 		local x = t.x+P_ReturnThrustX(mo,ang,dist)
@@ -544,7 +573,7 @@ local chaosRingFunc = function(mo)
 
 	//Determine toss blink
 	local tossblink = 0
-	if mo.lasttouched and mo.lasttouched.player and not(mo.target) then
+	if mo.lasttouched and mo.lasttouched.valid and mo.lasttouched.player and not(mo.target) then
 		tossblink = mo.lasttouched.player.tossdelay
 	end
 
@@ -659,7 +688,7 @@ addHook('ThinkFrame', do
 	elseif CHAOSRING_WINCOUNTDOWN > 0
 		for i = 1, 2 do
 			local bank = (i==1 and B.RedBank) or B.BlueBank
-			if #bank.chaosrings == 6 then
+			if bank.chaosrings == (CHAOSRING1|CHAOSRING2|CHAOSRING3|CHAOSRING4|CHAOSRING5|CHAOSRING6)
 				CHAOSRING_WINCOUNTDOWN = $-1
 			end
 		end
@@ -809,4 +838,6 @@ addHook('NetVars', function(net)
 	B.RedBank = net($)
 	B.BlueBank = net($)
 	CHAOSRING_SPAWNTABLE = net($)
+	CHAOSRING_WINCOUNTDOWN = net($)
+	CHAOSRING_LIVETABLE = net($)
 end)
