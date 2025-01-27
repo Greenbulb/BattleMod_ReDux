@@ -212,7 +212,7 @@ local capture = function(mo, player)
 end
 
 R.PreThinker = function()
-	--print(R.ID and R.ID.valid and R.ID.fuse)
+	if not(B.RubyGametype()) then return end
 	for player in players.iterate do
 		if player and player.mo then
 			if R.ID and R.ID.valid and not(player.mo.btagpointer) then

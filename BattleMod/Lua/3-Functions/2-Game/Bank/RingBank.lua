@@ -96,8 +96,10 @@ local spawnFunc = function(mo, team)
 	end
 	if team == 1
 		B.RedBank = mo
+		B.RedBank.chaosrings = {}
 	else
 		B.BlueBank = mo
+		B.BlueBank.chaosrings = {}
 	end
 	mo.state = S_TEAMRING
 	mo.scale = $<<1
@@ -173,6 +175,11 @@ mobjinfo[freeslot("MT_BATTLE_CHAOSRING")] = {
 	flags = MF_SPECIAL|MF_NOGRAVITY
 }
 
+mobjinfo[freeslot("MT_BATTLE_CHAOSRINGSPAWNER")] = {
+	doomednum = 3707,
+	spawnstate = S_NULL
+}
+
 local addHudSparkle = function(team, direction)
 	local w = 22
 	local h = 14
@@ -201,45 +208,62 @@ end
 
 local CHAOSRING_STARTSPAWNBUFFER = TICRATE*2 --Time it takes for Chaos Rings to start spawning
 local CHAOSRING_SPAWNBUFFER = TICRATE*46 --Chaos rings spawn every X seconds
-local CHAOSRING_SCALE = FRACUNIT
+local CHAOSRING_SCALE = FRACUNIT+(FRACUNIT/2)
 local CHAOSRING_TYPE = MT_BATTLE_CHAOSRING
-local CHAOSRING_ANGLESPEED = ANG1*8
+
+local idletics = TICRATE*16
+local waittics = TICRATE*4
+local freetics = TICRATE
+local bounceheight = 10
+local rotatespd = ANG1*8
+
+local SLOWCAPPINGALLY_SFX  = sfx_kc5a
+local SLOWCAPPINGENEMY_SFX = sfx_kc59
 
 local CHAOSRING_SPAWNTABLE = {}
 local CHAOSRING_LIVETABLE = {nil, nil, nil, nil, nil, nil} --Table where you can get each Chaos ring's Object
 
 local CHAOSRING_DATA = {
 	[1] = { --Gold
-		color = SKINCOLOR_GOLDENROD
+		color = SKINCOLOR_GOLDENROD,
+		textmap = "\x82"
 	},
 
 	[2] = { --Light Blue
-		color = SKINCOLOR_SKY
+		color = SKINCOLOR_SKY,
+		textmap = "\x88"
 	},
 
 	[3] = { --Green
-		color = SKINCOLOR_MASTER
+		color = SKINCOLOR_MASTER,
+		textmap = "\x83"
 	},
 
 	[4] = { --Pink
-		color = SKINCOLOR_FANCY
+		color = SKINCOLOR_FANCY,
+		textmap = "\x81"
 	},
 
 	[5] = { --Purple
-		color = SKINCOLOR_PURPLE
+		color = SKINCOLOR_PURPLE,
+		textmap = "\x89"
 	},
 
 	[6] = { --Blue
-		color = SKINCOLOR_SAPPHIRE
+		color = SKINCOLOR_SAPPHIRE,
+		textmap = "\x84"
 	}
 }
+local CHAOSRING_TEXT = function(num)
+	return CHAOSRING_DATA[num].textmap.."Chaos Ring".."\x80"
+end
 
 addHook('MapLoad', do
 
 	CHAOSRING_SPAWNTABLE = {} --Clear the table
 
 	for mt in mapthings.iterate do
-		if mt and (mt.type == 321) and mt.valid then --Match Chaos Emerald Spawn
+		if mt and (mt.type == 3707) and mt.valid then --Match Chaos Emerald Spawn
 
 			local chaosring_spawn = { --Data for the spawn
 				x = mt.x*FRACUNIT,
@@ -270,7 +294,7 @@ end
 
 
 local function touchChaosRing(mo, toucher) --Going to copy Ruby/Topaz code here
-	if mo.target == toucher or not(toucher.player) -- This toucher has already collected the item, or is not a player
+	if mo.captured or mo.target == toucher or not(toucher.player) -- This toucher has already collected the item, or is not a player
 	or P_PlayerInPain(toucher.player) or toucher.player.powers[pw_flashing] -- Can't touch if we've recently taken damage
 	or toucher.player.tossdelay -- Can't collect if tossflag is on cooldown
 		return true
@@ -279,7 +303,13 @@ local function touchChaosRing(mo, toucher) --Going to copy Ruby/Topaz code here
 	if (G_GametypeHasTeams() and previoustarget and previoustarget.player and (previoustarget.player.ctfteam == toucher.player.ctfteam))
 		return true
 	end
-	
+	if toucher.player.gotcrystal then
+		return true
+	end
+	if previoustarget and previoustarget.valid then
+		previoustarget.player.gotcrystal = false
+	end
+	toucher.player.gotcrystal = true
 	mo.target = toucher
 	free(mo)
 	mo.idle = nil
@@ -297,6 +327,13 @@ local function touchChaosRing(mo, toucher) --Going to copy Ruby/Topaz code here
 		--B.PrintGameFeed(toucher.player," stole the "..rubytext.." from ",previoustarget.player,"!")
 	end
 	return true
+end
+
+local function captureChaosRing(mo, bank)
+	table.insert(bank.chaosrings, mo)
+	mo.captured = true
+	mo.angle = $+(ANG1*60*mo.chaosring_num)
+	mo.scale = $-($/3)
 end
 
 addHook("TouchSpecial", touchChaosRing, CHAOSRING_TYPE)
@@ -317,17 +354,58 @@ local function spawnChaosRing(num, chaosringnum)
 	local thing = CHAOSRING_SPAWNTABLE[num]
 	local data = CHAOSRING_DATA[chaosringnum]
 	--local z = ((thing.options & MTF_AMBUSH) and (thing.z+(24*FRACUNIT))) or thing.z
-	local z = thing.z+(25*FRACUNIT)
+	local z = thing.z+(70*FRACUNIT)
 
 	thing.mo = P_SpawnMobj(thing.x, thing.y, z, CHAOSRING_TYPE)
 	thing.mo.scale = CHAOSRING_SCALE
 	thing.mo.state = S_TEAMRING
 	thing.mo.color = data.color
 	thing.mo.chaosring_num = chaosringnum
+	thing.mo.idealz = thing.mo.z
 	CHAOSRING_LIVETABLE[chaosringnum] = thing.mo
 end
 
-local function thinkChaosRing(mo)
+local CHAOSRING_AMBIENCE = freeslot("sfx_crng1")
+
+sfxinfo[CHAOSRING_AMBIENCE].caption = "Chaos Ring presence"
+sfxinfo[CHAOSRING_AMBIENCE].flags = $|SF_X2AWAYSOUND
+
+local chaosRingFunc = function(mo)
+	mo.shadowscale = FRACUNIT>>1
+	
+	-- Blink
+	if mo.fuse&1
+		mo.flags2 = $|MF2_DONTDRAW
+	else
+		mo.flags2 = $&~MF2_DONTDRAW
+	end
+	
+	mo.angle = $+rotatespd
+	
+	-- Owner has been pushed by another player
+	if mo.flags&MF_SPECIAL and mo.target and mo.target.valid 
+	and mo.target.pushed_last and mo.target.pushed_last.valid
+		touchChaosRing(mo,mo.target.pushed_last)
+	end
+	
+	-- Owner has taken damage or has gone missing
+	if mo.target and mo.target.player
+		if not(mo.target.valid)
+		or P_PlayerInPain(mo.target.player)
+		or mo.target.player.playerstate != PST_LIVE
+			if mo.target and mo.target.valid and mo.target.player then
+				B.PrintGameFeed(mo.target.player," dropped the "..CHAOSRING_TEXT(mo.chaosring_num)..".")
+			end
+			mo.target.player.gotcrystal = false
+			mo.target.player.gotcrystal_time = 0
+			mo.target = nil
+			B.ZLaunch(mo,FRACUNIT*bounceheight/2,true)
+			--B.XYLaunch(mo,mo.angle,FRACUNIT*5)	
+			P_InstaThrust(mo,mo.angle,FRACUNIT*5)
+			free(mo)
+			S_StartSound(mo, sfx_cdfm67)
+		end
+	end
 
 	if mo.chaosring_corona and mo.chaosring_corona.valid then
 		mo.chaosring_corona.fuse = max($, 2)
@@ -345,37 +423,94 @@ local function thinkChaosRing(mo)
 		mo.chaosring_corona.color = mo.color
 		mo.chaosring_corona.fuse = 2
 	end
-
-	mo.angle = $+CHAOSRING_ANGLESPEED
-
-	if mo.target and mo.target.valid then
-		local player = mo.target.player
-		local btns = player.cmd.buttons
-		if (btns&BT_TOSSFLAG and not(player.powers[pw_carry] & CR_PLAYER) and not(player.powers[pw_super]) and not(player.tossdelay) and G_GametypeHasTeams())
-			if player.gotcrystal then
-				S_StartSound(mo, sfx_toss)
-				--B.PrintGameFeed(player," tossed the "..rubytext..".")
-				player.actioncooldown = TICRATE
-				player.gotcrystal = false
-				player.gotcrystal_time = 0
-				player.tossdelay = TICRATE*2
-				free(mo)
-				if not (mo and mo.valid) then continue end
-				mo.target = nil
-				P_MoveOrigin(mo,player.mo.x,player.mo.y,player.mo.z)
-				B.ZLaunch(mo,player.mo.scale*6)
-				P_InstaThrust(mo,player.mo.angle,player.mo.scale*15)
+	
+	-- Unclaimed behavior
+	if not(mo.target and mo.target.valid) then
+		mo.flags = ($|MF_BOUNCE)&~MF_SLIDEME
+		if mo.flags & MF_GRENADEBOUNCE == 0
+			mo.flags = $|MF_NOGRAVITY
+			local zz = mo.idealz + (sin(leveltime * ANG10) * 128)
+			B.ZLaunch(mo, (zz - mo.z) / 120, false)
+			
+		else
+			if not(leveltime%8) then
+				local spark = P_SpawnMobjFromMobj(mo,0,0,0,MT_SUPERSPARK)
+				spark.scale = mo.scale
+				spark.colorized = true
+				spark.color = mo.color
+				spark.spriteyoffset = $-(FRACUNIT*6)
+			end
+			mo.flags = $&~MF_NOGRAVITY
+			if P_IsObjectOnGround(mo)
+				-- Bounce behavior
+				B.ZLaunch(mo, FRACUNIT*bounceheight/2, true)
+				S_StartSoundAtVolume(mo, sfx_tink, 100)
 			end
 		end
-		-- Owner has been pushed by another player
-		if mo.flags&MF_SPECIAL and mo.target and mo.target.valid 
-		and mo.target.pushed_last and mo.target.pushed_last.valid
-			touchChaosRing(mo,mo.target.pushed_last)
+		-- Presence ambience
+		if not S_SoundPlaying(mo, CHAOSRING_AMBIENCE)
+			S_StartSound(mo, CHAOSRING_AMBIENCE)
+		end
+	else
+		if S_SoundPlaying(mo, CHAOSRING_AMBIENCE)
+			S_StopSoundByID(mo, CHAOSRING_AMBIENCE)
+		end
+
+		if not(leveltime%8) then
+			local spark = P_SpawnMobjFromMobj(mo,0,0,0,MT_SUPERSPARK)
+			spark.scale = mo.scale
+			spark.colorized = true
+			spark.color = mo.color
+			spark.spriteyoffset = $-(FRACUNIT*6)
+		end
+
+		if mo.target.player then
+		
+			local capture = function(team, bank)
+				local captime = 5 * TICRATE
+				local friendly = (splitscreen or (consoleplayer and consoleplayer.ctfteam == team))
+				local sfx = friendly and SLOWCAPPINGALLY_SFX or SLOWCAPPINGENEMY_SFX
+				mo.target.player.gotcrystal_time = ($~=nil and $+1) or 0
+				mo.chaosring_capturing = true
+				if mo.target.player.gotcrystal_time > captime then
+					S_StartSound(nil, (friendly and sfx_kc5c) or sfx_kc46)
+					mo.target.player.gotcrystal = false
+					mo.target.player.gotcrystal_time = 0
+					captureChaosRing(mo, bank)
+					mo.target = bank
+					return true
+				else
+					if mo.target.player.gotcrystal_time % 35 == 11 then
+						S_StartSoundAtVolume(nil, sfx, 160)
+					elseif mo.target.player.gotcrystal_time % 35 == 22 then
+						S_StartSoundAtVolume(nil, sfx, 90)
+					elseif mo.target.player.gotcrystal_time % 35 == 33 then
+						S_StartSoundAtVolume(nil, sfx, 20)
+					end
+				end
+			end
+			
+			if not P_IsObjectOnGround(mo.target)
+				return
+			end
+			if mo.target.player.ctfteam == 1 and P_MobjTouchingSectorSpecialFlag(mo.target, SSF_REDTEAMBASE)
+				if capture(1,B.RedBank) then
+					return
+				end
+			elseif mo.target.player.ctfteam == 2 and P_MobjTouchingSectorSpecialFlag(mo.target, SSF_BLUETEAMBASE)
+				if capture(2,B.BlueBank) then
+					return
+				end
+			else
+				if mo.chaosring_capturing then
+					mo.target.player.gotcrystal_time = 0
+					mo.chaosring_capturing = nil
+				end
+			end
 		end
 
 		mo.flags = ($&~MF_BOUNCE)|MF_NOGRAVITY|MF_SLIDEME
 		local t = mo.target
-		local player = t.player
 		local ang = mo.angle
 		local dist = mo.target.radius*3
 		local x = t.x+P_ReturnThrustX(mo,ang,dist)
@@ -387,11 +522,47 @@ local function thinkChaosRing(mo)
 	-- 		z = $+t.height
 			mo.flags2 = $|MF2_OBJECTFLIP
 		end
-		--P_MoveOrigin(mo,t.x,t.y,t.z)
+		P_MoveOrigin(mo,t.x,t.y,t.z)
 		P_InstaThrust(mo,R_PointToAngle2(mo.x,mo.y,x,y),min(FRACUNIT*60,R_PointToDist2(mo.x,mo.y,x,y)))
 		mo.z = max(mo.floorz,min(mo.ceilingz+mo.height,z)) -- Do z pos while respecting level geometry
 	end
+
+	local cvar_pointlimit = CV_FindVar("pointlimit").value
+	local cvar_overtime = CV_FindVar("overtime").value
+	local cvar_timelimit = CV_FindVar("timelimit").value
+	local overtime = ((cvar_overtime) and cvar_timelimit*60-leveltime/TICRATE <= 0)
+
+	
+	-- Ruby Control capture mechanics
+	--[[
+	
+	--]]
+
 end
+
+local chaosRingPreFunc = function(mo)
+	-- Press tossflag to toss ruby
+	if not(mo.target and mo.target.valid and mo.target.player) then return end
+	local player = mo.target.player
+	local btns = player.cmd.buttons
+	if (btns&BT_TOSSFLAG and not(player.powers[pw_carry] & CR_PLAYER) and not(player.powers[pw_super]) and not(player.tossdelay) and G_GametypeHasTeams())
+		if player.gotcrystal then
+			S_StartSound(mo, sfx_toss)
+			B.PrintGameFeed(player," tossed a "..CHAOSRING_TEXT(mo.chaosring_num)..".")
+			player.actioncooldown = TICRATE
+			player.gotcrystal = false
+			player.gotcrystal_time = 0
+			player.tossdelay = TICRATE*2
+			free(mo)
+			if not (mo and mo.valid) then return end
+			mo.target = nil
+			P_MoveOrigin(mo,player.mo.x,player.mo.y,player.mo.z)
+			B.ZLaunch(mo,player.mo.scale*6)
+			P_InstaThrust(mo,player.mo.angle,player.mo.scale*15)
+		end
+	end
+end
+
 
 COM_AddCommand("chring", function(player)
 	for i = 1, 6 do
@@ -399,6 +570,15 @@ COM_AddCommand("chring", function(player)
 	end
 end)
 
+addHook("MobjThinker", chaosRingFunc, MT_BATTLE_CHAOSRING)
+addHook("PreThinkFrame", do
+	for i = 1, 7 do
+		if CHAOSRING_LIVETABLE[i] and CHAOSRING_LIVETABLE[i].valid then
+			chaosRingPreFunc(CHAOSRING_LIVETABLE[i])
+			continue
+		end
+	end
+end)
 
 
 addHook('ThinkFrame', do
@@ -406,15 +586,6 @@ addHook('ThinkFrame', do
 		return
 	end
 
-	local rs = redscore
-	local bs = bluescore
-	local blueInBlue = 0
-	local blueInRed = 0
-	local redInBlue = 0
-	local redInRed = 0
-
-
-	--Chaos Rings
 	for i = 1, 6 do
 		local chaosring = CHAOSRING_LIVETABLE[i]
 
@@ -423,8 +594,50 @@ addHook('ThinkFrame', do
 			continue
 		end
 
-		thinkChaosRing(chaosring)
+		-- rev: remove ruby if on a "remove ctf flag" sector type
+		/*local sector = chaosring.subsector.sector --P_MobjTouchingSectorSpecialFlag(chaosring, 0) or chaosring.subsector.sector --P_ThingOnSpecial3DFloor(chaosring) or chaosring.subsector.sector
+		local ruby_in_goop = chaosring.eflags&MFE_GOOWATER
+		local on_rflagbase = (GetSecSpecial(sector.special, 4) == 3) or (sector.specialflags&SSF_REDTEAMBASE)
+		local on_bflagbase = (GetSecSpecial(sector.special, 4) == 4) or (sector.specialflags&SSF_BLUETEAMBASE)
+		local on_return_sector = P_MobjTouchingSectorSpecialFlag(chaosring, SSF_RETURNFLAG) -- rev: i don't know if this even works..
+		local plr_has_ruby = chaosring.target and chaosring.target.valid
+
+		if not plr_has_ruby and (ruby_in_goop or (on_rflagbase or on_bflagbase or on_return_sector)) then
+			--print("fell into removal sector")
+			if (chaosring.target and chaosring.target.valid) then
+				B.PrintGameFeed(player, " dropped the "+CHAOSRING_TEXT(chaosring.chaosring_num)+".")
+			end
+
+			P_RemoveMobj(chaosring)
+			table.remove(CHAOSRING_LIVETABLE, i)
+			continue
+		end*/
+
+			-- Idle timer
+		if chaosring.idle != nil and not(chaosring.captured) then 
+			chaosring.idle = $-1
+			if chaosring.idle == 0
+				if chaosring.ctfteam
+					-- Remove team protection
+					chaosring.idle = nil
+					chaosring.ctfteam = 0
+				else
+					-- Remove object
+					P_SpawnMobj(chaosring.x,chaosring.y,chaosring.z,MT_SPARK)
+					P_RemoveMobj(chaosring)
+					table.remove(CHAOSRING_LIVETABLE, i)
+					continue
+				end
+			end
+		end
 	end
+
+	local rs = redscore
+	local bs = bluescore
+	local blueInBlue = 0
+	local blueInRed = 0
+	local redInBlue = 0
+	local redInRed = 0
 	
 	-- Get player-to-base statuses
 	for player in players.iterate do
@@ -451,7 +664,7 @@ addHook('ThinkFrame', do
 
 	-- Do player in base transactions
 	for player in players.iterate do
-		if player.mo and player.mo.health and not player.powers[pw_flashing]
+		if player.mo and player.mo.health and not player.powers[pw_flashing] and not(player.gotcrystal)
 			local base = getBase(player)
 			if base == 1 -- Red base
 				if redInRed and blueInRed
