@@ -1,6 +1,5 @@
 freeslot(
 	'mt_dustdevil_base',
-	'mt_dustdevil',
 	'mt_swirl'
 )
 
